@@ -1,128 +1,98 @@
-const { createClothes, getAllClothes, searchClothes } = require('../controller/controller');
-const { Clothes } = require('../models');
+const SequelizeMock = require('sequelize-mock');
+const ClothesService = require('../service/service');
 
-// Mock the Clothes model
-jest.mock('../models', () => ({
-  Clothes: {
-    create: jest.fn(),
-    findAll: jest.fn(),
-    findByPk: jest.fn(),
-    destroy: jest.fn(),
-  },
-}));
+const DBConnectionMock = new SequelizeMock();
+const ClothesMock = DBConnectionMock.define('clothes', {
+    id: 1,
+    color: 'Red',
+    size: 'M',
+    price: 100.00,
+    stock: 10,
+});
 
-describe('Clothes Controller', () => {
+describe('ClothesService', () => {
+    let clothesService;
 
-  // Test createClothes
-  describe('createClothes', () => {
-    it('should create new clothes and return 200 with created clothes', async () => {
-      const req = {
-        body: { color: 'red', size: 'M', price: 100, stock: 50 }
-      };
-      const res = {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn(),
-      };
+    beforeEach(() => {
+        clothesService = new ClothesService(ClothesMock);
 
-      const mockClothes = { id: 1, ...req.body };
-      Clothes.create.mockResolvedValue(mockClothes);
-
-      await createClothes(req, res);
-
-      expect(Clothes.create).toHaveBeenCalledWith(req.body);
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(mockClothes);
+        ClothesMock.findByPk = jest.fn().mockImplementation((id) => {
+          return ClothesMock.findOne({ where: { id } });
+      });
     });
 
-    it('should return 400 if creation fails', async () => {
-      const req = { body: {} };
-      const res = {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn(),
-      };
+    it('should create clothes', async () => {
+        const clothesData = { color: 'Blue', size: 'L', price: 120.00, stock: 5 };
+        ClothesMock.$queueResult(ClothesMock.build(clothesData));
 
-      const errorMessage = 'Validation error';
-      Clothes.create.mockRejectedValue(new Error(errorMessage));
+        const result = await clothesService.createClothes(clothesData);
 
-      await createClothes(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({ error: errorMessage });
-    });
-  });
-
-  // Test getAllClothes
-  describe('getAllClothes', () => {
-    it('should return all clothes with 200 status', async () => {
-      const req = {};
-      const res = {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn(),
-      };
-
-      const mockClothes = [
-        { id: 1, color: 'red', size: 'M', price: 100, stock: 50 },
-        { id: 2, color: 'blue', size: 'L', price: 120, stock: 30 }
-      ];
-      Clothes.findAll.mockResolvedValue(mockClothes);
-
-      await getAllClothes(req, res);
-
-      expect(Clothes.findAll).toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(mockClothes);
+        expect(result.color).toBe('Blue');
+        expect(result.size).toBe('L');
+        expect(result.price).toBe(120.00);
+        expect(result.stock).toBe(5);
     });
 
-    it('should return 400 if fetching fails', async () => {
-      const req = {};
-      const res = {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn(),
-      };
+    it('should get all clothes', async () => {
+        const result = await clothesService.getAllClothes();
 
-      const errorMessage = 'Fetch error';
-      Clothes.findAll.mockRejectedValue(new Error(errorMessage));
-
-      await getAllClothes(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({ error: errorMessage });
-    });
-  });
-
-  // Test searchClothes
-  describe('searchClothes', () => {
-    it('should search clothes by color and size', async () => {
-      const req = { query: { color: 'red', size: 'M' } };
-      const res = {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn(),
-      };
-
-      const mockClothes = [{ id: 1, color: 'red', size: 'M', price: 100, stock: 50 }];
-      Clothes.findAll.mockResolvedValue(mockClothes);
-
-      await searchClothes(req, res);
-
-      expect(Clothes.findAll).toHaveBeenCalledWith({ where: { color: 'red', size: 'M' } });
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(mockClothes);
+        console.log(result)
+        // expect(result).toHaveLength(1);
+        expect(result.color).toBe('Blue');
     });
 
-    it('should return 400 if search fails', async () => {
-      const req = { query: { color: 'red', size: 'M' } };
-      const res = {
-        status: jest.fn().mockReturnThis(),
-        json: jest.fn(),
-      };
+    it('should search clothes', async () => {
+        const query = { color: 'Red' };
+        ClothesMock.$queueResult([ClothesMock.build({ color: 'Red' })]);
 
-      const errorMessage = 'Search error';
-      Clothes.findAll.mockRejectedValue(new Error(errorMessage));
+        const result = await clothesService.searchClothes(query);
 
-      await searchClothes(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({ error: errorMessage });
+        expect(result).toHaveLength(1);
+        expect(result[0].color).toBe('Red');
     });
-  });
+
+    it('should update clothes', async () => {
+        const updateData = { size: 'L' };
+        const result = await clothesService.updateClothes(1, updateData);
+
+        expect(result.size).toBe('L');
+    });
+
+    it('should delete clothes', async () => {
+        ClothesMock.$queueResult(1);
+
+        const result = await clothesService.deleteClothes(1);
+
+        expect(result).toBe(1);
+    });
+
+    it('should add stock to clothes', async () => {
+        const result = await clothesService.addStock(1, 5);
+
+        expect(result.stock).toBe(15);
+    });
+
+    it('should reduce stock of clothes', async () => {
+        const result = await clothesService.reduceStock(1, 5);
+
+        expect(result.stock).toBe(5);
+    });
+
+    it('should get out of stock clothes', async () => {
+        ClothesMock.$queueResult([ClothesMock.build({ stock: 0 })]);
+
+        const result = await clothesService.getOutOfStockClothes();
+
+        expect(result).toHaveLength(1);
+        expect(result[0].stock).toBe(0);
+    });
+
+    it('should get low stock clothes', async () => {
+        ClothesMock.$queueResult([ClothesMock.build({ stock: 4 })]);
+
+        const result = await clothesService.getLowStockClothes();
+
+        expect(result).toHaveLength(1);
+        expect(result[0].stock).toBe(4);
+    });
 });
